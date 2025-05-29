@@ -1,0 +1,82 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Seller {
+  id       Int     @id @default(autoincrement())
+  name     String
+  email    String  @unique
+  phone    String
+  logo     String
+  password String 
+  orders   Order[]
+}
+
+model Factory {
+  id       Int      @id @default(autoincrement())
+  logo     String
+  name     String
+  email    String
+  phone    String
+  orders   Order[]
+  products Product[]  
+}
+
+model Client {
+  id            Int    @id @default(autoincrement())
+  companyName   String
+  cnpj          String
+  stateInscr    String
+  email         String
+  address       String
+  phone         String
+  orders        Order[]
+}
+
+model Product {
+  id           Int       @id @default(autoincrement())
+  name         String
+  code         String
+  colors       String   
+  unitPrice    Float
+  orderItems   OrderItem[]
+
+  factoryId    Int        
+  factory      Factory    @relation(fields: [factoryId], references: [id])
+}
+
+model Order {
+  id            Int         @id @default(autoincrement())
+  sellerId      Int
+  factoryId     Int
+  clientId      Int
+  createdAt     DateTime    @default(now())
+
+  paymentMethod String      // Forma de pagamento
+  buyerName     String      // Nome do comprador
+  description   String?     // Descrição opcional
+  orderNumber   String      // Número do pedido
+
+  seller        Seller      @relation(fields: [sellerId], references: [id])
+  factory       Factory     @relation(fields: [factoryId], references: [id])
+  client        Client      @relation(fields: [clientId], references: [id])
+
+  items         OrderItem[]
+}
+
+
+model OrderItem {
+  id         Int     @id @default(autoincrement())
+  orderId    Int
+  productId  Int
+  color      String
+  quantity   Int
+
+  order      Order   @relation(fields: [orderId], references: [id])
+  product    Product @relation(fields: [productId], references: [id])
+}
