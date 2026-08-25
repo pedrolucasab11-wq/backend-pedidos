@@ -12,17 +12,46 @@ model Seller {
   name     String
   email    String  @unique
   phone    String
-  logo     String
+  logo     String? @default("")
   password String 
   orders   Order[]
+  factories Factory[]
+  clients   Client[]
 }
 
 model Factory {
   id       Int      @id @default(autoincrement())
-  logo     String
-  name     String
-  email    String
-  phone    String
+  logo     String?  @default("")
+  active   Boolean  @default(true)
+
+  sellerId Int?
+  seller   Seller?  @relation(fields: [sellerId], references: [id])
+
+  // Dados
+  cnpj                String? @unique
+  name                String  // Nome Fantasia
+  razaoSocial         String?
+  inscricaoEstadual   String?
+
+  // Contato
+  phone    String  // Telefone comercial
+  celular  String?
+  email    String  // Email comercial
+
+  // Endereço
+  cep          String?
+  estado       String?
+  cidade       String?
+  bairro       String?
+  endereco     String?
+
+  // Atividade econômica
+  dataAbertura         DateTime?
+  porte                String?
+  atividadePrincipal   String?
+  atividadeSecundaria  String?
+  naturezaJuridica     String?
+
   orders   Order[]
   products Product[]  
 }
@@ -35,6 +64,11 @@ model Client {
   email         String
   address       String
   phone         String
+  active        Boolean @default(true)
+
+  sellerId      Int?
+  seller        Seller? @relation(fields: [sellerId], references: [id])
+
   orders        Order[]
 }
 
@@ -42,7 +76,8 @@ model Product {
   id           Int       @id @default(autoincrement())
   name         String
   code         String
-  colors       String   
+  type         String?
+  observation  String?
   unitPrice    Float
   orderItems   OrderItem[]
 
@@ -59,8 +94,10 @@ model Order {
 
   paymentMethod String      // Forma de pagamento
   buyerName     String      // Nome do comprador
+  buyerPhone    String?     // Telefone do comprador
   description   String?     // Descrição opcional
   orderNumber   String      // Número do pedido
+  freightType   String?
 
   seller        Seller      @relation(fields: [sellerId], references: [id])
   factory       Factory     @relation(fields: [factoryId], references: [id])
@@ -72,9 +109,11 @@ model Order {
 
 model OrderItem {
   id         Int     @id @default(autoincrement())
-  orderId    Int
-  productId  Int
-  color      String
+  orderId      Int
+  productId    Int
+  type         String?
+  observation  String?
+  discount     String?
   quantity   Int
 
   order      Order   @relation(fields: [orderId], references: [id])

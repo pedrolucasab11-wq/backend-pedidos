@@ -1,54 +1,54 @@
 import { Router } from "express";
-import { PrismaClient } from "@prisma/client";
+import prisma from "../lib/prisma";
+import { authenticateToken } from "../middlewares/authMiddleware";
 
 const router = Router();
-const prisma = new PrismaClient();
 
-// --- Product ---
-// Criar produto
-router.post("/", async (req, res) => {
-  const { name, code, colors, unitPrice, factoryId } = req.body;
+router.use(authenticateToken);
+
+// Criar produto (a fábrica precisa pertencer ao vendedor autenticado)
+router.post("/", async (req: any, res: any) => {
+  const { name, code, type, observation, unitPrice, factoryId } = req.body;
+  const sellerId = req.user.sellerId;
 
   try {
+    const factory = await prisma.factory.findFirst({ where: { id: factoryId, sellerId } });
+    if (!factory) {
+      return res.status(404).json({ message: "Fábrica não encontrada" });
+    }
+
     const product = await prisma.product.create({
       data: {
         name,
         code,
-        colors: JSON.stringify(colors),
+        type,
+        observation,
         unitPrice,
         factory: { connect: { id: factoryId } },
       },
-      include: { factory: true }, // <-- inclui dados da fábrica na resposta
+      include: { factory: true },
     });
 
-    // Deserializa colors na resposta
-    const result = {
-      ...product,
-      colors: JSON.parse(product.colors),
-    };
-
-    res.json(result);
+    res.json(product);
   } catch (error) {
-    console.error(error);
+    console.error("Erro ao criar produto:", error);
     res.status(500).json({ message: "Erro ao criar produto" });
   }
 });
 
-// Listar produtos
-router.get("/", async (req, res) => {
+// Listar produtos das fábricas do vendedor autenticado
+router.get("/", async (req: any, res: any) => {
+  const sellerId = req.user.sellerId;
+
   try {
     const products = await prisma.product.findMany({
-      include: { factory: true }, // <-- inclui dados da fábrica na listagem
+      where: { factory: { sellerId } },
+      include: { factory: true },
     });
 
-    const result = products.map((p) => ({
-      ...p,
-      colors: JSON.parse(p.colors),
-    }));
-
-    res.json(result);
+    res.json(products);
   } catch (error) {
-    console.error(error);
+    console.error("Erro ao listar produtos:", error);
     res.status(500).json({ message: "Erro ao listar produtos" });
   }
 });

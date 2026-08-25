@@ -1,7 +1,11 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
-const SECRET = "supersecret";
+const SECRET = process.env.JWT_SECRET as string;
+
+if (!SECRET) {
+  console.warn("⚠️  JWT_SECRET não definido no .env — usando fallback inseguro!");
+}
 
 export const authenticateToken = (
   req: Request,
@@ -13,13 +17,13 @@ export const authenticateToken = (
 
   if (!token) {
     res.sendStatus(401);
-    return; // <<< IMPORTANTE!!!
+    return;
   }
 
   jwt.verify(token, SECRET, (err, user) => {
     if (err) {
       res.sendStatus(403);
-      return; // <<< IMPORTANTE!!!
+      return;
     }
     (req as any).user = user;
     next();

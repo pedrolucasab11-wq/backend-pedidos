@@ -1,26 +1,28 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import { PrismaClient } from "@prisma/client";
 import routes from "./routes";
 import authRoutes from "./routes/auth";
+import prisma from "./lib/prisma";
 
 const app = express();
-const prisma = new PrismaClient();
 
-app.use(cors());
+// Em produção, defina CORS_ORIGIN com a URL do frontend (ex: https://seu-app.vercel.app).
+// Sem essa variável, libera qualquer origem — cenário aceitável para desenvolvimento local.
+const allowedOrigins = process.env.CORS_ORIGIN?.split(",").map((o) => o.trim());
+app.use(cors({ origin: allowedOrigins && allowedOrigins.length > 0 ? allowedOrigins : true }));
 app.use(express.json());
 
+app.use("/auth", authRoutes);
 app.use("/", routes);
 
-app.use("/auth", authRoutes);
-
 app.get("/", (req, res) => {
-  res.send("API Pedidos Online");
+  res.send("API Pedidos Online ✅");
 });
 
 const PORT = process.env.PORT || 3333;
 app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
+  console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
 });
 
 async function testConnection() {

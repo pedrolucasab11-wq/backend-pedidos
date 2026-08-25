@@ -1,9 +1,8 @@
 import { Router } from "express";
-import { PrismaClient } from "@prisma/client";
+import prisma from "../lib/prisma";
 import { authenticateToken } from "../middlewares/authMiddleware";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 function generateOrderNumber() {
   const timestamp = new Date()
@@ -14,18 +13,37 @@ function generateOrderNumber() {
   return `ORDER-${timestamp}-${random}`;
 }
 
-router.post("/", async (req, res) => {
+// Criar pedido (protegido por autenticação)
+router.post("/", authenticateToken, async (req: any, res: any) => {
+  const sellerId = req.user.sellerId;
   const {
-    sellerId,
     factoryId,
     clientId,
     products,
     paymentMethod,
     buyerName,
+    buyerPhone,
     description,
+    freightType,
   } = req.body;
 
   try {
+    // Garante que a fábrica e o cliente pertencem ao vendedor autenticado
+    const [factory, client] = await Promise.all([
+      prisma.factory.findFirst({ where: { id: factoryId, sellerId } }),
+      prisma.client.findFirst({ where: { id: clientId, sellerId } }),
+    ]);
+
+    if (!factory) {
+      return res.status(404).json({ error: "Fábrica não encontrada" });
+    }
+    if (!client) {
+      return res.status(404).json({ error: "Cliente não encontrado" });
+    }
+    if (client.active === false) {
+      return res.status(400).json({ error: "Este cliente está inativo e não pode receber novos pedidos." });
+    }
+
     const orderNumber = generateOrderNumber();
 
     const order = await prisma.order.create({
@@ -35,12 +53,16 @@ router.post("/", async (req, res) => {
         clientId,
         paymentMethod,
         buyerName,
+        buyerPhone,
         description,
+        freightType,
         orderNumber,
         items: {
           create: products.map((product: any) => ({
             productId: product.productId,
-            color: product.color,
+            type: product.type,
+            observation: product.observation,
+            discount: product.discount,
             quantity: product.quantity,
           })),
         },
@@ -57,18 +79,25 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.get("/", async (req, res) => {
+// Listar pedidos do vendedor autenticado
+router.get("/", authenticateToken, async (req: any, res: any) => {
+  const sellerId = req.user.sellerId;
+
   try {
     const orders = await prisma.order.findMany({
+      where: { sellerId },
       include: {
         items: {
           include: {
             product: true,
           },
         },
-        seller: true,
+        seller: { select: { id: true, name: true, email: true, phone: true, logo: true } },
         factory: true,
         client: true,
+      },
+      orderBy: {
+        createdAt: "desc",
       },
     });
     res.json(orders);
