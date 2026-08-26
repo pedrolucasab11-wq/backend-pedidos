@@ -159,6 +159,153 @@ router.get("/", authenticateToken, async (req: any, res: any) => {
   }
 });
 
+// Busca um pedido específico do vendedor autenticado (usado na tela de edição).
+router.get("/:id", authenticateToken, async (req: any, res: any) => {
+  const sellerId = req.user.sellerId;
+  const orderId = Number(req.params.id);
+
+  if (!Number.isInteger(orderId) || orderId <= 0) {
+    return res.status(400).json({ message: "Identificador de pedido inválido." });
+  }
+
+  try {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, sellerId },
+      include: {
+        items: { include: { product: true } },
+        seller: { select: { id: true, name: true, email: true, phone: true, logo: true } },
+        factory: { include: { products: true } },
+        client: true,
+      },
+    });
+
+    if (!order) {
+      return res.status(404).json({ message: "Pedido não encontrado." });
+    }
+
+    res.json(order);
+  } catch (error) {
+    console.error("Erro ao buscar pedido:", error);
+    res.status(500).json({ message: "Erro ao buscar pedido. Tente novamente em alguns instantes." });
+  }
+});
+
+// Atualiza um pedido existente: dados gerais e a lista completa de itens.
+// A fábrica do pedido não pode ser trocada aqui (evitaria inconsistência com
+// os produtos já vinculados); para mudar de fábrica, crie um novo pedido.
+router.put("/:id", authenticateToken, async (req: any, res: any) => {
+  const sellerId = req.user.sellerId;
+  const orderId = Number(req.params.id);
+  const {
+    clientId,
+    products,
+    paymentMethod,
+    buyerName,
+    buyerPhone,
+    description,
+    freightType,
+  } = req.body;
+
+  if (!Number.isInteger(orderId) || orderId <= 0) {
+    return res.status(400).json({ message: "Identificador de pedido inválido." });
+  }
+  if (!clientId) {
+    return res.status(400).json({ message: "Selecione o cliente do pedido." });
+  }
+  if (!paymentMethod?.trim()) {
+    return res.status(400).json({ message: "Selecione a forma de pagamento." });
+  }
+  if (!buyerName?.trim()) {
+    return res.status(400).json({ message: "Informe o nome do comprador." });
+  }
+  if (!Array.isArray(products) || products.length === 0) {
+    return res.status(400).json({ message: "O pedido precisa ter pelo menos um produto." });
+  }
+
+  for (const item of products) {
+    if (!item?.productId) {
+      return res.status(400).json({ message: "Um dos itens do pedido está sem produto selecionado." });
+    }
+    const quantity = Number(item.quantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      return res.status(400).json({ message: "A quantidade de cada item deve ser maior que zero." });
+    }
+    const unitPrice = Number(item.unitPrice);
+    if (item.unitPrice === undefined || item.unitPrice === null || item.unitPrice === "") {
+      return res.status(400).json({ message: "Informe o valor unitário de cada produto do pedido." });
+    }
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      return res.status(400).json({ message: "O valor unitário de cada item deve ser um número válido." });
+    }
+  }
+
+  try {
+    const existingOrder = await prisma.order.findFirst({ where: { id: orderId, sellerId } });
+    if (!existingOrder) {
+      return res.status(404).json({ message: "Pedido não encontrado." });
+    }
+
+    const client = await prisma.client.findFirst({ where: { id: clientId, sellerId } });
+    if (!client) {
+      return res.status(404).json({ message: "Cliente não encontrado." });
+    }
+    if (client.active === false) {
+      return res.status(400).json({ message: "Este cliente está inativo e não pode receber pedidos." });
+    }
+
+    // Os produtos precisam pertencer à fábrica original do pedido (que não muda na edição).
+    const productIds = products.map((item: any) => item.productId);
+    const validProducts = await prisma.product.findMany({
+      where: { id: { in: productIds }, factoryId: existingOrder.factoryId },
+      select: { id: true },
+    });
+    const validProductIds = new Set(validProducts.map((p) => p.id));
+    const invalidItem = products.find((item: any) => !validProductIds.has(item.productId));
+    if (invalidItem) {
+      return res.status(400).json({ message: "Um dos produtos selecionados não pertence à fábrica deste pedido." });
+    }
+
+    // Substitui todos os itens do pedido: remove os antigos e cria os novos
+    // dentro de uma transação, para não deixar o pedido em estado inconsistente
+    // caso algo falhe no meio do caminho.
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      await tx.orderItem.deleteMany({ where: { orderId } });
+
+      return tx.order.update({
+        where: { id: orderId },
+        data: {
+          clientId,
+          paymentMethod,
+          buyerName,
+          buyerPhone,
+          description,
+          freightType,
+          items: {
+            create: products.map((item: any) => ({
+              productId: item.productId,
+              type: item.type,
+              observation: item.observation,
+              discount: item.discount,
+              quantity: Number(item.quantity),
+              unitPrice: Number(item.unitPrice),
+            })),
+          },
+        },
+        include: {
+          items: { include: { product: true } },
+          factory: true,
+          client: true,
+        },
+      });
+    });
+
+    res.json(updatedOrder);
+  } catch (error) {
+    console.error("Erro ao atualizar pedido:", error);
+    res.status(500).json({ message: "Erro ao atualizar pedido. Tente novamente em alguns instantes." });
+  }
+});
+
 // Envia o resumo do pedido por e-mail para o cliente e/ou a fábrica.
 // O corpo aceita destinatários independentes por tipo, permitindo enviar só
 // para um dos dois, ou para ambos com e-mails diferentes dos cadastrados.
