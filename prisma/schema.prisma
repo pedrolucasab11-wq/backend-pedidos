@@ -43,13 +43,13 @@ model Factory {
   estado       String?
   cidade       String?
   bairro       String?
-  endereco     String?
+  endereco     String?  @db.Text
 
   // Atividade econômica
   dataAbertura         DateTime?
   porte                String?
-  atividadePrincipal   String?
-  atividadeSecundaria  String?
+  atividadePrincipal   String?  @db.Text
+  atividadeSecundaria  String?  @db.Text
   naturezaJuridica     String?
 
   orders   Order[]
