@@ -1,8 +1,14 @@
 import { Router } from "express";
 import prisma from "../lib/prisma";
 import { authenticateToken } from "../middlewares/authMiddleware";
+import { sendMail, isMailerConfigured } from "../lib/mailer";
+import { buildOrderEmailHtml } from "../lib/orderEmailTemplate";
 
 const router = Router();
+
+// Regra simples de validação de e-mail (suficiente para bloquear entradas
+// obviamente inválidas antes de tentar o envio via SMTP).
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function generateOrderNumber() {
   const timestamp = new Date()
@@ -150,6 +156,97 @@ router.get("/", authenticateToken, async (req: any, res: any) => {
   } catch (error) {
     console.error("Erro ao buscar pedidos:", error);
     res.status(500).json({ message: "Erro ao buscar pedidos. Tente novamente em alguns instantes." });
+  }
+});
+
+// Envia o resumo do pedido por e-mail para o cliente e/ou a fábrica.
+// O corpo aceita destinatários independentes por tipo, permitindo enviar só
+// para um dos dois, ou para ambos com e-mails diferentes dos cadastrados.
+router.post("/:id/send-email", authenticateToken, async (req: any, res: any) => {
+  const sellerId = req.user.sellerId;
+  const orderId = Number(req.params.id);
+  const { recipients } = req.body as {
+    recipients?: { type: "client" | "factory"; email: string }[];
+  };
+
+  if (!Number.isInteger(orderId) || orderId <= 0) {
+    return res.status(400).json({ message: "Identificador de pedido inválido." });
+  }
+  if (!Array.isArray(recipients) || recipients.length === 0) {
+    return res.status(400).json({ message: "Selecione ao menos um destinatário para o envio." });
+  }
+
+  for (const recipient of recipients) {
+    if (recipient.type !== "client" && recipient.type !== "factory") {
+      return res.status(400).json({ message: "Tipo de destinatário inválido." });
+    }
+    if (!recipient.email?.trim() || !EMAIL_REGEX.test(recipient.email.trim())) {
+      return res.status(400).json({ message: `E-mail inválido para ${recipient.type === "client" ? "o cliente" : "a fábrica"}.` });
+    }
+  }
+
+  if (!isMailerConfigured()) {
+    return res.status(503).json({
+      message: "O envio de e-mails não está configurado no servidor. Contate o suporte.",
+    });
+  }
+
+  try {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, sellerId },
+      include: {
+        items: { include: { product: true } },
+        seller: { select: { name: true, email: true, phone: true } },
+        factory: true,
+        client: true,
+      },
+    });
+
+    if (!order) {
+      return res.status(404).json({ message: "Pedido não encontrado." });
+    }
+
+    const html = buildOrderEmailHtml({
+      orderNumber: order.orderNumber,
+      createdAt: order.createdAt,
+      buyerName: order.buyerName,
+      buyerPhone: order.buyerPhone,
+      paymentMethod: order.paymentMethod,
+      freightType: order.freightType,
+      description: order.description,
+      items: order.items,
+      seller: order.seller,
+      factory: order.factory,
+      client: order.client,
+    });
+
+    const subject = `Pedido ${order.orderNumber} - ${order.factory.name}`;
+
+    // Envia para cada destinatário independentemente: se um falhar (ex: e-mail
+    // inexistente), os demais ainda devem ser enviados, e o resultado de cada
+    // um é reportado separadamente ao usuário.
+    const results = await Promise.all(
+      recipients.map(async (recipient) => {
+        try {
+          await sendMail({ to: recipient.email.trim(), subject, html });
+          return { type: recipient.type, email: recipient.email.trim(), success: true };
+        } catch (error) {
+          console.error(`Erro ao enviar e-mail para ${recipient.type}:`, error);
+          return { type: recipient.type, email: recipient.email.trim(), success: false };
+        }
+      })
+    );
+
+    const allFailed = results.every((r) => !r.success);
+    res.status(allFailed ? 502 : 200).json({
+      message: allFailed
+        ? "Não foi possível enviar o e-mail para nenhum destinatário."
+        : "Envio processado.",
+      results,
+    });
+  } catch (error) {
+    console.error("Erro ao enviar e-mail do pedido:", error);
+    res.status(500).json({ message: "Erro ao enviar e-mail do pedido. Tente novamente em alguns instantes." });
   }
 });
 
