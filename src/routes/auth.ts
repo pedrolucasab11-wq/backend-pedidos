@@ -65,19 +65,23 @@ router.get("/me", authenticateToken, async (req: any, res: any) => {
 router.post("/login", async (req: any, res: any) => {
   const { email, password } = req.body;
 
+  if (!email?.trim() || !password) {
+    return res.status(400).json({ message: "Informe e-mail e senha." });
+  }
+
   try {
     const seller = await prisma.seller.findUnique({
       where: { email },
     });
 
     if (!seller) {
-      return res.status(400).json({ message: "Vendedor não encontrado." });
+      return res.status(401).json({ message: "E-mail ou senha incorretos." });
     }
 
     const isPasswordValid = await bcrypt.compare(password, seller.password);
 
     if (!isPasswordValid) {
-      return res.status(401).json({ message: "Senha incorreta." });
+      return res.status(401).json({ message: "E-mail ou senha incorretos." });
     }
 
     const token = jwt.sign({ sellerId: seller.id }, SECRET, { expiresIn: "8h" });

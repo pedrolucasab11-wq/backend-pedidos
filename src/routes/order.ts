@@ -27,6 +27,19 @@ router.post("/", authenticateToken, async (req: any, res: any) => {
     freightType,
   } = req.body;
 
+  if (!factoryId || !clientId) {
+    return res.status(400).json({ message: "Selecione a fábrica e o cliente do pedido." });
+  }
+  if (!paymentMethod?.trim()) {
+    return res.status(400).json({ message: "Selecione a forma de pagamento." });
+  }
+  if (!buyerName?.trim()) {
+    return res.status(400).json({ message: "Informe o nome do comprador." });
+  }
+  if (!Array.isArray(products) || products.length === 0) {
+    return res.status(400).json({ message: "Adicione pelo menos um produto ao pedido." });
+  }
+
   try {
     // Garante que a fábrica e o cliente pertencem ao vendedor autenticado
     const [factory, client] = await Promise.all([
@@ -35,13 +48,13 @@ router.post("/", authenticateToken, async (req: any, res: any) => {
     ]);
 
     if (!factory) {
-      return res.status(404).json({ error: "Fábrica não encontrada" });
+      return res.status(404).json({ message: "Fábrica não encontrada." });
     }
     if (!client) {
-      return res.status(404).json({ error: "Cliente não encontrado" });
+      return res.status(404).json({ message: "Cliente não encontrado." });
     }
     if (client.active === false) {
-      return res.status(400).json({ error: "Este cliente está inativo e não pode receber novos pedidos." });
+      return res.status(400).json({ message: "Este cliente está inativo e não pode receber novos pedidos." });
     }
 
     const orderNumber = generateOrderNumber();
@@ -72,10 +85,10 @@ router.post("/", authenticateToken, async (req: any, res: any) => {
       },
     });
 
-    res.json(order);
+    res.status(201).json(order);
   } catch (error) {
     console.error("Erro ao criar pedido:", error);
-    res.status(500).json({ error: "Erro ao criar pedido" });
+    res.status(500).json({ message: "Erro ao criar pedido. Tente novamente em alguns instantes." });
   }
 });
 
@@ -103,7 +116,7 @@ router.get("/", authenticateToken, async (req: any, res: any) => {
     res.json(orders);
   } catch (error) {
     console.error("Erro ao buscar pedidos:", error);
-    res.status(500).json({ error: "Erro ao buscar pedidos" });
+    res.status(500).json({ message: "Erro ao buscar pedidos. Tente novamente em alguns instantes." });
   }
 });
 

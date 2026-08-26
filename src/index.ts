@@ -20,6 +20,25 @@ app.get("/", (req, res) => {
   res.send("API Pedidos Online ✅");
 });
 
+// Rota não encontrada
+app.use((req, res) => {
+  res.status(404).json({ message: "Rota não encontrada." });
+});
+
+// Error handler central: captura erros não tratados por qualquer rota/middleware
+// (incluindo JSON malformado no body, lançado sincronamente pelo express.json())
+// e garante que o cliente sempre receba um JSON consistente, nunca um crash silencioso.
+const errorHandler: express.ErrorRequestHandler = (err, req, res, next) => {
+  if (err.type === "entity.parse.failed") {
+    res.status(400).json({ message: "Corpo da requisição inválido. Verifique os dados enviados." });
+    return;
+  }
+
+  console.error("Erro não tratado:", err);
+  res.status(err.status || 500).json({ message: "Erro interno no servidor. Tente novamente em alguns instantes." });
+};
+app.use(errorHandler);
+
 const PORT = process.env.PORT || 3333;
 app.listen(PORT, () => {
   console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);

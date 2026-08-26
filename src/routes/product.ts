@@ -11,10 +11,20 @@ router.post("/", async (req: any, res: any) => {
   const { name, code, type, observation, unitPrice, factoryId } = req.body;
   const sellerId = req.user.sellerId;
 
+  if (!name?.trim() || !code?.trim() || unitPrice === undefined || unitPrice === null) {
+    return res.status(400).json({ message: "Nome, código e preço unitário são obrigatórios." });
+  }
+  if (!factoryId) {
+    return res.status(400).json({ message: "Selecione a fábrica do produto." });
+  }
+  if (typeof unitPrice !== "number" || Number.isNaN(unitPrice) || unitPrice < 0) {
+    return res.status(400).json({ message: "Preço unitário inválido." });
+  }
+
   try {
     const factory = await prisma.factory.findFirst({ where: { id: factoryId, sellerId } });
     if (!factory) {
-      return res.status(404).json({ message: "Fábrica não encontrada" });
+      return res.status(404).json({ message: "Fábrica não encontrada." });
     }
 
     const product = await prisma.product.create({
@@ -29,10 +39,13 @@ router.post("/", async (req: any, res: any) => {
       include: { factory: true },
     });
 
-    res.json(product);
-  } catch (error) {
+    res.status(201).json(product);
+  } catch (error: any) {
+    if (error.code === "P2002") {
+      return res.status(409).json({ message: "Já existe um produto cadastrado com este código." });
+    }
     console.error("Erro ao criar produto:", error);
-    res.status(500).json({ message: "Erro ao criar produto" });
+    res.status(500).json({ message: "Erro ao criar produto. Tente novamente em alguns instantes." });
   }
 });
 
@@ -49,7 +62,7 @@ router.get("/", async (req: any, res: any) => {
     res.json(products);
   } catch (error) {
     console.error("Erro ao listar produtos:", error);
-    res.status(500).json({ message: "Erro ao listar produtos" });
+    res.status(500).json({ message: "Erro ao listar produtos. Tente novamente em alguns instantes." });
   }
 });
 
