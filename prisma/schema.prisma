@@ -28,7 +28,7 @@ model Factory {
   seller   Seller?  @relation(fields: [sellerId], references: [id])
 
   // Dados
-  cnpj                String? @unique
+  cnpj                String?
   name                String  // Nome Fantasia
   razaoSocial         String?
   inscricaoEstadual   String?
@@ -53,7 +53,10 @@ model Factory {
   naturezaJuridica     String?
 
   orders   Order[]
-  products Product[]  
+  products Product[]
+
+  // CNPJ único apenas dentro das fábricas de um mesmo vendedor, nunca globalmente.
+  @@unique([sellerId, cnpj], name: "sellerId_cnpj")
 }
 
 model Client {
