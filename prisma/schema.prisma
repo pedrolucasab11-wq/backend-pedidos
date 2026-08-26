@@ -80,12 +80,15 @@ model Product {
   name         String
   code         String
   type         String?
-  observation  String?
+  observation  String?   @db.Text
   unitPrice    Float
   orderItems   OrderItem[]
 
   factoryId    Int        
   factory      Factory    @relation(fields: [factoryId], references: [id])
+
+  // Código único apenas dentro dos produtos de uma mesma fábrica.
+  @@unique([factoryId, code], name: "factoryId_code")
 }
 
 model Order {
