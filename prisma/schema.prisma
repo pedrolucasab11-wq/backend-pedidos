@@ -81,7 +81,9 @@ model Product {
   code         String
   type         String?
   observation  String?   @db.Text
-  unitPrice    Float
+  // Preço de referência opcional: o preço real de venda é sempre informado
+  // no momento do pedido (OrderItem.unitPrice), pois pode variar por negociação.
+  unitPrice    Float?
   orderItems   OrderItem[]
 
   factoryId    Int        
@@ -121,6 +123,10 @@ model OrderItem {
   observation  String?
   discount     String?
   quantity   Int
+  // Preço unitário no momento em que o pedido foi feito. É "congelado" aqui
+  // porque o preço do produto pode variar entre pedidos e não deve ser
+  // recalculado retroativamente se o preço de referência do produto mudar.
+  unitPrice    Float
 
   order      Order   @relation(fields: [orderId], references: [id])
   product    Product @relation(fields: [productId], references: [id])

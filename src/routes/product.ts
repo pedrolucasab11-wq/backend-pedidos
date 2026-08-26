@@ -11,6 +11,8 @@ router.use(authenticateToken);
 const MAX_TEXT_FIELD_LENGTH = 150;
 
 // Criar produto (a fábrica precisa pertencer ao vendedor autenticado)
+// O preço unitário é opcional aqui: o valor de venda real é sempre informado
+// no momento do pedido, pois pode variar por negociação com o cliente.
 router.post("/", async (req: any, res: any) => {
   const sellerId = req.user.sellerId;
   const factoryId = Number(req.body.factoryId);
@@ -18,7 +20,9 @@ router.post("/", async (req: any, res: any) => {
   const code = typeof req.body.code === "string" ? req.body.code.trim() : "";
   const type = typeof req.body.type === "string" ? req.body.type.trim() : null;
   const observation = typeof req.body.observation === "string" ? req.body.observation.trim() : null;
-  const unitPrice = Number(req.body.unitPrice);
+
+  const hasUnitPrice = req.body.unitPrice !== undefined && req.body.unitPrice !== null && req.body.unitPrice !== "";
+  const unitPrice = hasUnitPrice ? Number(req.body.unitPrice) : null;
 
   if (!req.body.factoryId || !Number.isInteger(factoryId) || factoryId <= 0) {
     return res.status(400).json({ message: "Selecione a fábrica do produto." });
@@ -35,14 +39,11 @@ router.post("/", async (req: any, res: any) => {
   if (type && type.length > MAX_TEXT_FIELD_LENGTH) {
     return res.status(400).json({ message: `O tipo do produto deve ter no máximo ${MAX_TEXT_FIELD_LENGTH} caracteres.` });
   }
-  if (req.body.unitPrice === undefined || req.body.unitPrice === null || req.body.unitPrice === "") {
-    return res.status(400).json({ message: "Informe o preço unitário do produto." });
+  if (hasUnitPrice && (!Number.isFinite(unitPrice) || (unitPrice as number) < 0)) {
+    return res.status(400).json({ message: "O preço de referência deve ser um número maior ou igual a zero." });
   }
-  if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
-    return res.status(400).json({ message: "O preço unitário deve ser um número maior que zero." });
-  }
-  if (unitPrice > 999_999_999) {
-    return res.status(400).json({ message: "O preço unitário informado é muito alto." });
+  if (hasUnitPrice && (unitPrice as number) > 999_999_999) {
+    return res.status(400).json({ message: "O preço de referência informado é muito alto." });
   }
 
   try {

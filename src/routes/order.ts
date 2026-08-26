@@ -40,6 +40,25 @@ router.post("/", authenticateToken, async (req: any, res: any) => {
     return res.status(400).json({ message: "Adicione pelo menos um produto ao pedido." });
   }
 
+  // Valida cada item do pedido: produto e quantidade obrigatórios, preço unitário
+  // obrigatório e maior que zero (é sempre informado na hora do pedido, pois varia).
+  for (const item of products) {
+    if (!item?.productId) {
+      return res.status(400).json({ message: "Um dos itens do pedido está sem produto selecionado." });
+    }
+    const quantity = Number(item.quantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      return res.status(400).json({ message: "A quantidade de cada item deve ser maior que zero." });
+    }
+    const unitPrice = Number(item.unitPrice);
+    if (item.unitPrice === undefined || item.unitPrice === null || item.unitPrice === "") {
+      return res.status(400).json({ message: "Informe o valor unitário de cada produto do pedido." });
+    }
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      return res.status(400).json({ message: "O valor unitário de cada item deve ser um número válido." });
+    }
+  }
+
   try {
     // Garante que a fábrica e o cliente pertencem ao vendedor autenticado
     const [factory, client] = await Promise.all([
@@ -57,6 +76,19 @@ router.post("/", authenticateToken, async (req: any, res: any) => {
       return res.status(400).json({ message: "Este cliente está inativo e não pode receber novos pedidos." });
     }
 
+    // Garante que todos os produtos do pedido pertencem à fábrica selecionada
+    // (evita, por exemplo, montar um pedido com productId de outra fábrica/vendedor).
+    const productIds = products.map((item: any) => item.productId);
+    const validProducts = await prisma.product.findMany({
+      where: { id: { in: productIds }, factoryId },
+      select: { id: true },
+    });
+    const validProductIds = new Set(validProducts.map((p) => p.id));
+    const invalidItem = products.find((item: any) => !validProductIds.has(item.productId));
+    if (invalidItem) {
+      return res.status(400).json({ message: "Um dos produtos selecionados não pertence a esta fábrica." });
+    }
+
     const orderNumber = generateOrderNumber();
 
     const order = await prisma.order.create({
@@ -71,17 +103,18 @@ router.post("/", authenticateToken, async (req: any, res: any) => {
         freightType,
         orderNumber,
         items: {
-          create: products.map((product: any) => ({
-            productId: product.productId,
-            type: product.type,
-            observation: product.observation,
-            discount: product.discount,
-            quantity: product.quantity,
+          create: products.map((item: any) => ({
+            productId: item.productId,
+            type: item.type,
+            observation: item.observation,
+            discount: item.discount,
+            quantity: Number(item.quantity),
+            unitPrice: Number(item.unitPrice),
           })),
         },
       },
       include: {
-        items: true,
+        items: { include: { product: true } },
       },
     });
 
