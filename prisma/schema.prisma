@@ -100,7 +100,10 @@ model Order {
   clientId      Int
   createdAt     DateTime    @default(now())
 
-  paymentMethod String      // Forma de pagamento
+  paymentMethod String      // Forma de pagamento (Pix, Boleto, Cartão, Dinheiro)
+  // Prazo/parcelamento do pagamento em dias, quando aplicável (ex: boleto "30/60/90").
+  // Texto livre porque o prazo do boleto varia caso a caso, não é uma lista fixa.
+  paymentTerms  String?
   buyerName     String      // Nome do comprador
   buyerPhone    String?     // Telefone do comprador
   description   String?     // Descrição opcional

@@ -19,6 +19,14 @@ function generateOrderNumber() {
   return `ORDER-${timestamp}-${random}`;
 }
 
+// Formas de pagamento que costumam ter prazo/parcelamento em dias (ex: boleto
+// 30/60/90). O prazo é sempre texto livre porque varia de negociação para
+// negociação, não é uma lista fixa de opções.
+function isInstallmentPayment(paymentMethod: string) {
+  const normalized = paymentMethod.trim().toLowerCase();
+  return normalized.includes("boleto") || normalized.includes("prazo");
+}
+
 // Criar pedido (protegido por autenticação)
 router.post("/", authenticateToken, async (req: any, res: any) => {
   const sellerId = req.user.sellerId;
@@ -27,6 +35,7 @@ router.post("/", authenticateToken, async (req: any, res: any) => {
     clientId,
     products,
     paymentMethod,
+    paymentTerms,
     buyerName,
     buyerPhone,
     description,
@@ -38,6 +47,9 @@ router.post("/", authenticateToken, async (req: any, res: any) => {
   }
   if (!paymentMethod?.trim()) {
     return res.status(400).json({ message: "Selecione a forma de pagamento." });
+  }
+  if (paymentTerms && typeof paymentTerms !== "string") {
+    return res.status(400).json({ message: "O prazo de pagamento informado é inválido." });
   }
   if (!buyerName?.trim()) {
     return res.status(400).json({ message: "Informe o nome do comprador." });
@@ -96,6 +108,11 @@ router.post("/", authenticateToken, async (req: any, res: any) => {
     }
 
     const orderNumber = generateOrderNumber();
+    // O prazo só é relevante para pagamentos parcelados (boleto/prazo); em
+    // outras formas de pagamento ele é ignorado, mesmo que enviado por engano.
+    const resolvedPaymentTerms = isInstallmentPayment(paymentMethod)
+      ? paymentTerms?.trim() || null
+      : null;
 
     const order = await prisma.order.create({
       data: {
@@ -103,6 +120,7 @@ router.post("/", authenticateToken, async (req: any, res: any) => {
         factoryId,
         clientId,
         paymentMethod,
+        paymentTerms: resolvedPaymentTerms,
         buyerName,
         buyerPhone,
         description,
@@ -200,6 +218,7 @@ router.put("/:id", authenticateToken, async (req: any, res: any) => {
     clientId,
     products,
     paymentMethod,
+    paymentTerms,
     buyerName,
     buyerPhone,
     description,
@@ -214,6 +233,9 @@ router.put("/:id", authenticateToken, async (req: any, res: any) => {
   }
   if (!paymentMethod?.trim()) {
     return res.status(400).json({ message: "Selecione a forma de pagamento." });
+  }
+  if (paymentTerms && typeof paymentTerms !== "string") {
+    return res.status(400).json({ message: "O prazo de pagamento informado é inválido." });
   }
   if (!buyerName?.trim()) {
     return res.status(400).json({ message: "Informe o nome do comprador." });
@@ -268,6 +290,10 @@ router.put("/:id", authenticateToken, async (req: any, res: any) => {
     // Substitui todos os itens do pedido: remove os antigos e cria os novos
     // dentro de uma transação, para não deixar o pedido em estado inconsistente
     // caso algo falhe no meio do caminho.
+    const resolvedPaymentTerms = isInstallmentPayment(paymentMethod)
+      ? paymentTerms?.trim() || null
+      : null;
+
     const updatedOrder = await prisma.$transaction(async (tx) => {
       await tx.orderItem.deleteMany({ where: { orderId } });
 
@@ -276,6 +302,7 @@ router.put("/:id", authenticateToken, async (req: any, res: any) => {
         data: {
           clientId,
           paymentMethod,
+          paymentTerms: resolvedPaymentTerms,
           buyerName,
           buyerPhone,
           description,
@@ -359,6 +386,7 @@ router.post("/:id/send-email", authenticateToken, async (req: any, res: any) => 
       buyerName: order.buyerName,
       buyerPhone: order.buyerPhone,
       paymentMethod: order.paymentMethod,
+      paymentTerms: order.paymentTerms,
       freightType: order.freightType,
       description: order.description,
       items: order.items,

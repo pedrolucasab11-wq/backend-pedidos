@@ -15,6 +15,7 @@ interface OrderForEmail {
   buyerName: string;
   buyerPhone?: string | null;
   paymentMethod: string;
+  paymentTerms?: string | null;
   freightType?: string | null;
   description?: string | null;
   items: OrderItemForEmail[];
@@ -96,7 +97,7 @@ export function buildOrderEmailHtml(order: OrderForEmail): string {
       </table>
 
       <p style="margin:0 0 4px;"><strong>Comprador:</strong> ${escapeHtml(order.buyerName)}${order.buyerPhone ? ` — ${escapeHtml(order.buyerPhone)}` : ""}</p>
-      <p style="margin:0 0 4px;"><strong>Forma de pagamento:</strong> ${escapeHtml(order.paymentMethod)}</p>
+      <p style="margin:0 0 4px;"><strong>Forma de pagamento:</strong> ${escapeHtml(order.paymentMethod)}${order.paymentTerms ? ` (prazo: ${escapeHtml(order.paymentTerms)} dias)` : ""}</p>
       ${order.freightType ? `<p style="margin:0 0 4px;"><strong>Frete:</strong> ${escapeHtml(order.freightType)}</p>` : ""}
       ${order.description ? `<p style="margin:0 0 4px;"><strong>Observações:</strong> ${escapeHtml(order.description)}</p>` : ""}
 
