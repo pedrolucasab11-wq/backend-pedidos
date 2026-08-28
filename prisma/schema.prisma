@@ -73,6 +73,10 @@ model Client {
   seller        Seller? @relation(fields: [sellerId], references: [id])
 
   orders        Order[]
+
+  // CNPJ único apenas dentro dos clientes de um mesmo vendedor, nunca globalmente
+  // (mesmo padrão já usado em Factory), para impedir cadastro duplicado do mesmo cliente.
+  @@unique([sellerId, cnpj], name: "sellerId_cnpj")
 }
 
 model Product {
