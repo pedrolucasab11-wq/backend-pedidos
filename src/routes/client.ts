@@ -31,6 +31,42 @@ router.post("/", async (req: any, res: any) => {
   }
 });
 
+// Atualiza os dados de um cliente já cadastrado (ex: cliente mudou de e-mail,
+// telefone ou endereço). Mesmos campos obrigatórios do cadastro.
+router.put("/:id", async (req: any, res: any) => {
+  const { id } = req.params;
+  const sellerId = req.user.sellerId;
+  const { companyName, cnpj, stateInscr, email, address, phone } = req.body;
+
+  if (!Number.isInteger(Number(id))) {
+    return res.status(400).json({ message: "Identificador de cliente inválido." });
+  }
+  if (!companyName?.trim() || !cnpj?.trim() || !email?.trim() || !phone?.trim() || !address?.trim()) {
+    return res.status(400).json({
+      message: "Nome da empresa, CNPJ, e-mail, telefone e endereço são obrigatórios.",
+    });
+  }
+
+  try {
+    const existing = await prisma.client.findFirst({ where: { id: Number(id), sellerId } });
+    if (!existing) {
+      return res.status(404).json({ message: "Cliente não encontrado." });
+    }
+
+    const client = await prisma.client.update({
+      where: { id: Number(id) },
+      data: { companyName, cnpj, stateInscr, email, address, phone },
+    });
+    res.json(client);
+  } catch (error: any) {
+    if (error.code === "P2002") {
+      return res.status(409).json({ message: "Já existe outro cliente cadastrado com este CNPJ." });
+    }
+    console.error("Erro ao atualizar cliente:", error);
+    res.status(500).json({ message: "Erro ao atualizar cliente. Tente novamente em alguns instantes." });
+  }
+});
+
 // Listar clientes do vendedor autenticado
 router.get("/", async (req: any, res: any) => {
   const sellerId = req.user.sellerId;
