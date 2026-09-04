@@ -14,6 +14,7 @@ interface OrderForEmail {
   createdAt: Date;
   buyerName: string;
   buyerPhone?: string | null;
+  sellerName?: string | null;
   paymentMethod: string;
   paymentTerms?: string | null;
   freightType?: string | null;
@@ -77,7 +78,7 @@ export function buildOrderEmailHtml(order: OrderForEmail): string {
         <tr>
           <td style="vertical-align:top;width:33%;padding-right:10px;">
             <strong>Vendedor</strong><br>
-            ${escapeHtml(order.seller.name)}<br>
+            ${escapeHtml(order.sellerName || order.seller.name)}<br>
             <small>${escapeHtml(order.seller.email)}</small><br>
             <small>${escapeHtml(order.seller.phone)}</small>
           </td>

@@ -10,13 +10,17 @@ const router = Router();
 // obviamente inválidas antes de tentar o envio via SMTP).
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Número do pedido curto e fácil de localizar/dizer em voz alta na hora de
+// "dar baixa": prefixo PED + data (AAMMDD) + 4 dígitos aleatórios.
+// Ex: PED-260827-4821 (bem mais curto que o formato anterior, que incluía
+// o horário completo: ORDER-20260827160357-2828).
 function generateOrderNumber() {
-  const timestamp = new Date()
+  const datePart = new Date()
     .toISOString()
     .replace(/[-:.TZ]/g, "")
-    .slice(0, 14);
+    .slice(2, 8); // AAMMDD
   const random = Math.floor(1000 + Math.random() * 9000);
-  return `ORDER-${timestamp}-${random}`;
+  return `PED-${datePart}-${random}`;
 }
 
 // Formas de pagamento que costumam ter prazo/parcelamento em dias (ex: boleto
@@ -38,6 +42,7 @@ router.post("/", authenticateToken, async (req: any, res: any) => {
     paymentTerms,
     buyerName,
     buyerPhone,
+    sellerName,
     description,
     freightType,
   } = req.body;
@@ -123,6 +128,7 @@ router.post("/", authenticateToken, async (req: any, res: any) => {
         paymentTerms: resolvedPaymentTerms,
         buyerName,
         buyerPhone,
+        sellerName: sellerName?.trim() || null,
         description,
         freightType,
         orderNumber,
@@ -221,6 +227,7 @@ router.put("/:id", authenticateToken, async (req: any, res: any) => {
     paymentTerms,
     buyerName,
     buyerPhone,
+    sellerName,
     description,
     freightType,
   } = req.body;
@@ -305,6 +312,7 @@ router.put("/:id", authenticateToken, async (req: any, res: any) => {
           paymentTerms: resolvedPaymentTerms,
           buyerName,
           buyerPhone,
+          sellerName: sellerName?.trim() || null,
           description,
           freightType,
           items: {
@@ -385,6 +393,7 @@ router.post("/:id/send-email", authenticateToken, async (req: any, res: any) => 
       createdAt: order.createdAt,
       buyerName: order.buyerName,
       buyerPhone: order.buyerPhone,
+      sellerName: order.sellerName,
       paymentMethod: order.paymentMethod,
       paymentTerms: order.paymentTerms,
       freightType: order.freightType,

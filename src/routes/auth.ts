@@ -8,11 +8,25 @@ const router = Router();
 
 const SECRET = process.env.JWT_SECRET as string;
 
+// Telefones são aceitos como array (um ou mais números) e persistidos como
+// uma única string, separados por "; " — mesmo padrão de texto livre já usado
+// em outros campos do sistema (ex: Order.paymentTerms) para evitar criar uma
+// tabela nova só para isso.
+const PHONE_SEPARATOR = "; ";
+
+function normalizePhones(input: unknown): string | null {
+  const list = Array.isArray(input) ? input : typeof input === "string" ? [input] : [];
+  const cleaned = list.map((p) => String(p).trim()).filter(Boolean);
+  return cleaned.length > 0 ? cleaned.join(PHONE_SEPARATOR) : null;
+}
+
 // Cadastro self-service de novo vendedor (cria a conta e já autentica)
 router.post("/register", async (req: any, res: any) => {
-  const { name, email, phone, password } = req.body;
+  const { name, email, phone, phones, representation, password } = req.body;
 
-  if (!name?.trim() || !email?.trim() || !phone?.trim() || !password) {
+  const phoneValue = normalizePhones(phones ?? phone);
+
+  if (!name?.trim() || !email?.trim() || !phoneValue || !password) {
     return res.status(400).json({ message: "Nome, e-mail, telefone e senha são obrigatórios." });
   }
   if (password.length < 6) {
@@ -27,7 +41,13 @@ router.post("/register", async (req: any, res: any) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const seller = await prisma.seller.create({
-      data: { name, email, phone, password: hashedPassword },
+      data: {
+        name,
+        email,
+        phone: phoneValue,
+        representation: representation?.trim() || null,
+        password: hashedPassword,
+      },
     });
 
     const token = jwt.sign({ sellerId: seller.id }, SECRET, { expiresIn: "8h" });
@@ -48,17 +68,63 @@ router.get("/me", authenticateToken, async (req: any, res: any) => {
   try {
     const seller = await prisma.seller.findUnique({
       where: { id: req.user.sellerId },
-      select: { id: true, name: true, email: true, phone: true, logo: true },
+      select: { id: true, name: true, email: true, phone: true, representation: true, logo: true },
     });
 
     if (!seller) {
       return res.status(404).json({ message: "Vendedor não encontrado." });
     }
 
-    res.json(seller);
+    res.json({ ...seller, phones: seller.phone.split(PHONE_SEPARATOR) });
   } catch (error) {
     console.error("Erro ao buscar dados do vendedor:", error);
     res.status(500).json({ message: "Erro interno no servidor." });
+  }
+});
+
+// Atualiza os dados do próprio vendedor autenticado (perfil). A senha só é
+// alterada quando enviada; os demais campos são sempre substituídos pelo valor
+// recebido (o front deve enviar o estado completo do formulário de perfil).
+router.put("/me", authenticateToken, async (req: any, res: any) => {
+  const sellerId = req.user.sellerId;
+  const { name, email, phones, phone, representation, logo, password } = req.body;
+
+  const phoneValue = normalizePhones(phones ?? phone);
+
+  if (!name?.trim() || !email?.trim() || !phoneValue) {
+    return res.status(400).json({ message: "Nome, e-mail e telefone são obrigatórios." });
+  }
+  if (password && password.length < 6) {
+    return res.status(400).json({ message: "A nova senha deve ter pelo menos 6 caracteres." });
+  }
+
+  try {
+    if (email.trim() !== undefined) {
+      const existing = await prisma.seller.findUnique({ where: { email: email.trim() } });
+      if (existing && existing.id !== sellerId) {
+        return res.status(409).json({ message: "Já existe uma conta cadastrada com este e-mail." });
+      }
+    }
+
+    const data: any = {
+      name: name.trim(),
+      email: email.trim(),
+      phone: phoneValue,
+      representation: representation?.trim() || null,
+    };
+    if (logo !== undefined) data.logo = logo;
+    if (password) data.password = await bcrypt.hash(password, 10);
+
+    const seller = await prisma.seller.update({
+      where: { id: sellerId },
+      data,
+      select: { id: true, name: true, email: true, phone: true, representation: true, logo: true },
+    });
+
+    res.json({ ...seller, phones: seller.phone.split(PHONE_SEPARATOR) });
+  } catch (error) {
+    console.error("Erro ao atualizar perfil do vendedor:", error);
+    res.status(500).json({ message: "Erro ao atualizar perfil. Tente novamente em alguns instantes." });
   }
 });
 

@@ -11,7 +11,12 @@ model Seller {
   id       Int     @id @default(autoincrement())
   name     String
   email    String  @unique
+  // Um ou mais telefones de contato, separados por "; " (mesmo padrão de texto
+  // livre já usado em Order.paymentTerms/OrderItem.discount para listas simples).
   phone    String
+  // Nome da representação comercial (razão/trade name do representante),
+  // opcional pois nem todo vendedor tem uma representação formalmente registrada.
+  representation String?
   logo     String? @default("")
   password String 
   orders   Order[]
@@ -110,6 +115,10 @@ model Order {
   paymentTerms  String?
   buyerName     String      // Nome do comprador
   buyerPhone    String?     // Telefone do comprador
+  // Nome de quem realizou a venda neste pedido especificamente. Pode ser
+  // diferente do nome cadastrado na conta (ex: outro vendedor da mesma
+  // representação usando a mesma conta). Editável livremente no pedido.
+  sellerName    String?
   description   String?     // Descrição opcional
   orderNumber   String      // Número do pedido
   freightType   String?
