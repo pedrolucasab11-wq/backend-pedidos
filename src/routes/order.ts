@@ -43,6 +43,7 @@ router.post("/", authenticateToken, async (req: any, res: any) => {
     buyerName,
     buyerPhone,
     sellerName,
+    clientObservation,
     description,
     freightType,
   } = req.body;
@@ -129,6 +130,7 @@ router.post("/", authenticateToken, async (req: any, res: any) => {
         buyerName,
         buyerPhone,
         sellerName: sellerName?.trim() || null,
+        clientObservation: clientObservation?.trim() || null,
         description,
         freightType,
         orderNumber,
@@ -228,6 +230,7 @@ router.put("/:id", authenticateToken, async (req: any, res: any) => {
     buyerName,
     buyerPhone,
     sellerName,
+    clientObservation,
     description,
     freightType,
   } = req.body;
@@ -313,6 +316,7 @@ router.put("/:id", authenticateToken, async (req: any, res: any) => {
           buyerName,
           buyerPhone,
           sellerName: sellerName?.trim() || null,
+          clientObservation: clientObservation?.trim() || null,
           description,
           freightType,
           items: {
@@ -394,6 +398,7 @@ router.post("/:id/send-email", authenticateToken, async (req: any, res: any) => 
       buyerName: order.buyerName,
       buyerPhone: order.buyerPhone,
       sellerName: order.sellerName,
+      clientObservation: order.clientObservation,
       paymentMethod: order.paymentMethod,
       paymentTerms: order.paymentTerms,
       freightType: order.freightType,

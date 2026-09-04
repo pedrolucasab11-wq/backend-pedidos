@@ -119,6 +119,10 @@ model Order {
   // diferente do nome cadastrado na conta (ex: outro vendedor da mesma
   // representação usando a mesma conta). Editável livremente no pedido.
   sellerName    String?
+  // Observação específica sobre o cliente neste pedido (ex: preferências,
+  // combinados, instruções de entrega). Diferente de "description", que é
+  // uma observação geral do pedido em si.
+  clientObservation String? @db.Text
   description   String?     // Descrição opcional
   orderNumber   String      // Número do pedido
   freightType   String?
