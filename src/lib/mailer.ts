@@ -1,48 +1,28 @@
-import nodemailer, { Transporter } from "nodemailer";
+import { Resend } from "resend";
 
-let transporter: Transporter | null = null;
+// Envio de e-mail via API HTTPS do Resend, em vez de SMTP. Escolhido porque
+// muitas plataformas de hospedagem (ex: Railway, nos planos gratuitos/hobby)
+// bloqueiam portas SMTP de saída (25/465/587) para prevenir spam, o que fazia
+// o envio via SMTP travar em timeout. A API do Resend funciona por HTTPS
+// normal, então não depende dessas portas.
+let resendClient: Resend | null = null;
 let isConfigured = false;
 
-/**
- * Cria (uma única vez) o transporter SMTP a partir das variáveis de ambiente.
- * Se as credenciais não estiverem configuradas, o envio de e-mail fica
- * desabilitado e as rotas que dependem disso devem responder com erro claro
- * em vez de falhar silenciosamente.
- */
-function getTransporter(): Transporter | null {
-  if (transporter) return transporter;
+function getClient(): Resend | null {
+  if (resendClient) return resendClient;
 
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
-
-  if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
     return null;
   }
 
-  transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: Number(SMTP_PORT),
-    secure: Number(SMTP_PORT) === 465, // 465 usa SSL direto; 587/25 usam STARTTLS
-    auth: {
-      user: SMTP_USER,
-      // Senhas de app do Gmail costumam vir copiadas com espaços (ex: "abcd
-      // efgh ijkl mnop"); removê-los evita falha de autenticação silenciosa.
-      pass: SMTP_PASS.replace(/\s+/g, ""),
-    },
-    // Sem esses limites, uma conexão bloqueada (ex: porta SMTP indisponível
-    // na plataforma de hospedagem) trava a requisição por minutos até o
-    // timeout padrão do sistema operacional. Falhar rápido aqui garante que
-    // o usuário recebe uma resposta de erro em segundos, não em minutos.
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
-  });
+  resendClient = new Resend(apiKey);
   isConfigured = true;
-
-  return transporter;
+  return resendClient;
 }
 
 export function isMailerConfigured(): boolean {
-  getTransporter();
+  getClient();
   return isConfigured;
 }
 
@@ -53,22 +33,30 @@ interface SendMailParams {
 }
 
 /**
- * Envia um e-mail via SMTP. Lança erro se o serviço não estiver configurado
+ * Envia um e-mail via Resend. Lança erro se o serviço não estiver configurado
  * ou se o envio falhar (deixa o chamador decidir como reportar isso ao usuário).
  */
 export async function sendMail({ to, subject, html }: SendMailParams): Promise<void> {
-  const client = getTransporter();
+  const client = getClient();
   if (!client) {
     throw new Error("Serviço de e-mail não configurado no servidor.");
   }
 
-  const fromName = process.env.SMTP_FROM_NAME || "Sistema de Pedidos";
-  const fromAddress = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER;
+  const fromName = process.env.MAIL_FROM_NAME || "Sistema de Pedidos";
+  // onboarding@resend.dev é o domínio de teste do Resend: só entrega e-mails
+  // para o endereço cadastrado na própria conta Resend. Para enviar a
+  // clientes/fábricas reais, configure MAIL_FROM_EMAIL com um endereço de um
+  // domínio verificado na conta (Resend > Domains).
+  const fromAddress = process.env.MAIL_FROM_EMAIL || "onboarding@resend.dev";
 
-  await client.sendMail({
-    from: `"${fromName}" <${fromAddress}>`,
+  const { error } = await client.emails.send({
+    from: `${fromName} <${fromAddress}>`,
     to,
     subject,
     html,
   });
+
+  if (error) {
+    throw new Error(error.message || "Falha ao enviar e-mail via Resend.");
+  }
 }
