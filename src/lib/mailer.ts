@@ -24,8 +24,17 @@ function getTransporter(): Transporter | null {
     secure: Number(SMTP_PORT) === 465, // 465 usa SSL direto; 587/25 usam STARTTLS
     auth: {
       user: SMTP_USER,
-      pass: SMTP_PASS,
+      // Senhas de app do Gmail costumam vir copiadas com espaços (ex: "abcd
+      // efgh ijkl mnop"); removê-los evita falha de autenticação silenciosa.
+      pass: SMTP_PASS.replace(/\s+/g, ""),
     },
+    // Sem esses limites, uma conexão bloqueada (ex: porta SMTP indisponível
+    // na plataforma de hospedagem) trava a requisição por minutos até o
+    // timeout padrão do sistema operacional. Falhar rápido aqui garante que
+    // o usuário recebe uma resposta de erro em segundos, não em minutos.
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
   });
   isConfigured = true;
 

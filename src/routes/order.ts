@@ -419,9 +419,17 @@ router.post("/:id/send-email", authenticateToken, async (req: any, res: any) => 
         try {
           await sendMail({ to: recipient.email.trim(), subject, html });
           return { type: recipient.type, email: recipient.email.trim(), success: true };
-        } catch (error) {
+        } catch (error: any) {
           console.error(`Erro ao enviar e-mail para ${recipient.type}:`, error);
-          return { type: recipient.type, email: recipient.email.trim(), success: false };
+          // Repassa uma mensagem curta do erro (ex: "Invalid login", "Connection
+          // timeout") para ajudar a diagnosticar problemas de SMTP em produção,
+          // sem expor detalhes sensíveis como credenciais.
+          return {
+            type: recipient.type,
+            email: recipient.email.trim(),
+            success: false,
+            error: error?.message || "Erro desconhecido ao enviar e-mail.",
+          };
         }
       })
     );
