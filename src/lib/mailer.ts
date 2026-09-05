@@ -15,17 +15,25 @@ export function isMailerConfigured(): boolean {
   return isConfigured();
 }
 
+interface SendMailAttachment {
+  /** Nome do arquivo exibido ao destinatário, ex: "Pedido-PED-260904-1234.pdf" */
+  name: string;
+  /** Conteúdo do arquivo já codificado em base64. */
+  content: string;
+}
+
 interface SendMailParams {
   to: string;
   subject: string;
   html: string;
+  attachments?: SendMailAttachment[];
 }
 
 /**
  * Envia um e-mail via Brevo. Lança erro se o serviço não estiver configurado
  * ou se o envio falhar (deixa o chamador decidir como reportar isso ao usuário).
  */
-export async function sendMail({ to, subject, html }: SendMailParams): Promise<void> {
+export async function sendMail({ to, subject, html, attachments }: SendMailParams): Promise<void> {
   const apiKey = process.env.BREVO_API_KEY;
   if (!apiKey) {
     throw new Error("Serviço de e-mail não configurado no servidor.");
@@ -59,6 +67,8 @@ export async function sendMail({ to, subject, html }: SendMailParams): Promise<v
         to: [{ email: to }],
         subject,
         htmlContent: html,
+        // A API do Brevo espera o anexo como { content: base64, name: string }.
+        ...(attachments && attachments.length > 0 ? { attachment: attachments } : {}),
       }),
       signal: controller.signal,
     });

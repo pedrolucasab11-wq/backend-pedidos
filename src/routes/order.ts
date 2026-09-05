@@ -2,7 +2,7 @@ import { Router } from "express";
 import prisma from "../lib/prisma";
 import { authenticateToken } from "../middlewares/authMiddleware";
 import { sendMail, isMailerConfigured } from "../lib/mailer";
-import { buildOrderEmailHtml } from "../lib/orderEmailTemplate";
+import { generateOrderPdfBuffer } from "../lib/orderPdf";
 
 const router = Router();
 
@@ -200,7 +200,10 @@ router.get("/:id", authenticateToken, async (req: any, res: any) => {
       include: {
         items: { include: { product: true } },
         seller: { select: { id: true, name: true, email: true, phone: true, logo: true } },
-        factory: { include: { products: true } },
+        // Produtos da fábrica não são incluídos aqui: a edição do pedido busca
+        // produtos sob demanda via GET /products?factoryId=... (evita carregar
+        // toda a lista de uma fábrica com muitos produtos de uma vez só).
+        factory: true,
         client: true,
       },
     });
@@ -382,7 +385,7 @@ router.post("/:id/send-email", authenticateToken, async (req: any, res: any) => 
       where: { id: orderId, sellerId },
       include: {
         items: { include: { product: true } },
-        seller: { select: { name: true, email: true, phone: true } },
+        seller: { select: { name: true, email: true, phone: true, representation: true } },
         factory: true,
         client: true,
       },
@@ -392,7 +395,10 @@ router.post("/:id/send-email", authenticateToken, async (req: any, res: any) => 
       return res.status(404).json({ message: "Pedido não encontrado." });
     }
 
-    const html = buildOrderEmailHtml({
+    // Gera o PDF do pedido uma única vez e anexa em todos os envios: é o
+    // mesmo documento (com o resumo completo de produtos, valores e
+    // condições) que o vendedor recebe ao imprimir o pedido pelo navegador.
+    const pdfBuffer = await generateOrderPdfBuffer({
       orderNumber: order.orderNumber,
       createdAt: order.createdAt,
       buyerName: order.buyerName,
@@ -408,8 +414,19 @@ router.post("/:id/send-email", authenticateToken, async (req: any, res: any) => 
       factory: order.factory,
       client: order.client,
     });
+    const pdfBase64 = pdfBuffer.toString("base64");
+    const pdfFileName = `Pedido-${order.orderNumber}.pdf`;
 
     const subject = `Pedido ${order.orderNumber} - ${order.factory.name}`;
+    // Corpo simples: o conteúdo completo do pedido vai no PDF anexado, não
+    // repetido em HTML no corpo do e-mail.
+    const html = `
+      <div style="font-family:Arial,sans-serif;color:#222;">
+        <p>Olá,</p>
+        <p>Segue em anexo o resumo do pedido <strong>${order.orderNumber}</strong>, referente à fábrica <strong>${order.factory.name}</strong>.</p>
+        <p style="color:#888;font-size:12px;margin-top:24px;">Este é um e-mail automático enviado pelo Sistema de Pedidos.</p>
+      </div>
+    `;
 
     // Envia para cada destinatário independentemente: se um falhar (ex: e-mail
     // inexistente), os demais ainda devem ser enviados, e o resultado de cada
@@ -417,7 +434,12 @@ router.post("/:id/send-email", authenticateToken, async (req: any, res: any) => 
     const results = await Promise.all(
       recipients.map(async (recipient) => {
         try {
-          await sendMail({ to: recipient.email.trim(), subject, html });
+          await sendMail({
+            to: recipient.email.trim(),
+            subject,
+            html,
+            attachments: [{ name: pdfFileName, content: pdfBase64 }],
+          });
           return { type: recipient.type, email: recipient.email.trim(), success: true };
         } catch (error: any) {
           console.error(`Erro ao enviar e-mail para ${recipient.type}:`, error);

@@ -147,7 +147,11 @@ router.put("/:id", async (req: any, res: any) => {
   }
 });
 
-// Listar fábricas do vendedor autenticado
+// Listar fábricas do vendedor autenticado.
+// Retorna só a contagem de produtos (_count), não a lista completa: uma
+// fábrica pode ter muitos produtos, e essa rota é usada em listagens (ex:
+// select de fábrica ao criar pedido) que só precisam mostrar "X produtos".
+// Para trabalhar com os produtos em si, use GET /products?factoryId=... .
 router.get("/", async (req: any, res: any) => {
   const sellerId = req.user.sellerId;
 
@@ -155,7 +159,7 @@ router.get("/", async (req: any, res: any) => {
     const factories = await prisma.factory.findMany({
       where: { sellerId },
       include: {
-        products: true,
+        _count: { select: { products: true } },
       },
       orderBy: { id: "desc" },
     });
